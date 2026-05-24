@@ -76,3 +76,97 @@ body {
 .chart-gradient {
   background: linear-gradient(180deg, rgba(96, 165, 250, 0.1) 0%, rgba(96, 165, 250, 0) 100%);
 }
+
+/* Native Dialog Drawer Slide-out and Backdrop Animations */
+dialog {
+  display: none;
+  transform: translateX(100%);
+  transition: 
+    transform 0.25s ease-out, 
+    display 0.25s allow-discrete, 
+    overlay 0.25s allow-discrete;
+}
+
+dialog[open] {
+  display: block;
+  transform: translateX(0);
+  
+  @starting-style {
+    transform: translateX(100%);
+  }
+}
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+  transition: 
+    background-color 0.25s ease-out, 
+    backdrop-filter 0.25s ease-out, 
+    display 0.25s allow-discrete, 
+    overlay 0.25s allow-discrete;
+}
+
+dialog[open]::backdrop {
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  
+  @starting-style {
+    background-color: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+/* CSS Anchor Positioning Dropdowns */
+#user-menu-trigger {
+  anchor-name: --user-menu-anchor;
+}
+
+#user-menu-popover {
+  position-anchor: --user-menu-anchor;
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block, flip-inline;
+  margin-top: 0.5rem;
+}
+
+#notification-trigger {
+  anchor-name: --notification-anchor;
+}
+
+#notification-popover {
+  position-anchor: --notification-anchor;
+  position-area: block-end span-inline-start;
+  position-try-fallbacks: flip-block, flip-inline;
+  margin-top: 0.5rem;
+}
+
+/* Anchor Positioning fallback style rules (for browsers lacking anchor positioning) */
+@supports not (anchor-name: --test) {
+  [popover] {
+    position: fixed;
+    right: 1.5rem;
+    top: 4.5rem;
+  }
+}
+
+/* Popover display combined rule to avoid browser style discard */
+[popover]:is(:popover-open, .\:popover-open) {
+  display: block;
+}
+
+/* Container Queries */
+.container-insights {
+  container-type: inline-size;
+}
+
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@container (min-width: 500px) {
+  .insights-list {
+    display: grid;
+    grid-template-cols: repeat(3, minmax(0, 1fr));
+  }
+}

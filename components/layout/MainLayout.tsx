@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import MobileNav from "./MobileNav";
@@ -14,6 +14,43 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (isLogOpen) {
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+    } else {
+      if (dialog.open) {
+        dialog.close();
+      }
+    }
+  }, [isLogOpen]);
+
+  const handleDialogClick = (event: React.MouseEvent<HTMLDialogElement>) => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    // Fallback for browsers without closedby support
+    if (!("closedBy" in HTMLDialogElement.prototype)) {
+      if (event.target !== dialog) return;
+      const rect = dialog.getBoundingClientRect();
+      const isDialogContent = (
+        rect.top <= event.clientY &&
+        event.clientY <= rect.top + rect.height &&
+        rect.left <= event.clientX &&
+        event.clientX <= rect.left + rect.width
+      );
+
+      if (!isDialogContent) {
+        setIsLogOpen(false);
+      }
+    }
+  };
 
   // Form states
   const [distance, setDistance] = useState("5");
@@ -108,91 +145,96 @@ export default function MainLayout({ children }: MainLayoutProps) {
       <MobileNav onLogClick={() => setIsLogOpen(true)} />
 
       {/* Slide-out Commute Logger Drawer */}
-      {isLogOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
-          <div className="absolute inset-0" onClick={() => setIsLogOpen(false)}></div>
-          
-          <div className="relative w-full max-w-md bg-surface h-full shadow-2xl p-6 flex flex-col animate-in slide-in-from-right duration-200 border-l border-borderDefault">
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-borderDefault">
-              <div>
-                <h3 className="text-lg font-bold text-textPrimary font-headline">Log Sustainable Commute</h3>
-                <p className="text-xs text-textSecondary mt-1">Record your transit to earn green energy balance.</p>
+      <dialog
+        ref={dialogRef}
+        onClose={() => setIsLogOpen(false)}
+        onClick={handleDialogClick}
+        closedby="any"
+        aria-labelledby="dialog-title"
+        aria-describedby="dialog-desc"
+        className="m-0 ml-auto h-full max-h-none w-full max-w-md bg-surface border-l border-borderDefault shadow-2xl p-0 focus:outline-none overflow-hidden"
+      >
+        <div className="p-6 flex flex-col h-full">
+          {/* Drawer Header */}
+          <div className="flex items-center justify-between pb-4 border-b border-borderDefault">
+            <div>
+              <h3 id="dialog-title" className="text-lg font-bold text-textPrimary font-headline">Log Sustainable Commute</h3>
+              <p id="dialog-desc" className="text-xs text-textSecondary mt-1">Record your transit to earn green energy balance.</p>
+            </div>
+            <button
+              onClick={() => setIsLogOpen(false)}
+              type="button"
+              className="p-1 rounded-lg text-textSecondary hover:text-textPrimary hover:bg-elevated"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Log Form */}
+          <form onSubmit={handleLogCommute} className="flex-1 flex flex-col justify-between py-6">
+            <div className="space-y-6">
+              {/* Distance */}
+              <div className="space-y-2">
+                <label htmlFor="distance" className="text-xs font-bold text-textSecondary uppercase tracking-wider block">
+                  Commute Distance (km)
+                </label>
+                <input
+                  type="number"
+                  id="distance"
+                  step="0.1"
+                  min="0.1"
+                  required
+                  value={distance}
+                  onChange={(e) => setDistance(e.target.value)}
+                  className="w-full bg-elevated border border-borderDefault rounded-xl px-4 py-3 text-textPrimary font-mono font-bold focus:outline-none focus:ring-2 focus:ring-energy/20 focus:border-energy"
+                />
               </div>
-              <button
-                onClick={() => setIsLogOpen(false)}
-                className="p-1 rounded-lg text-textSecondary hover:text-textPrimary hover:bg-elevated"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* Transport Mode */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-textSecondary uppercase tracking-wider block mb-2">
+                  Transport Mode
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {commuteStats.map((mode) => (
+                    <button
+                      key={mode.name}
+                      type="button"
+                      onClick={() => setTransportMode(mode.name)}
+                      className={`flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
+                        transportMode === mode.name
+                          ? "bg-energy/10 border-energy text-energy font-bold"
+                          : "bg-surface border-borderDefault hover:bg-elevated text-textSecondary hover:text-textPrimary"
+                      }`}
+                    >
+                      <span className="text-2xl mb-1">{mode.emoji}</span>
+                      <span className="text-xs">{mode.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Live Estimator Indicator */}
+              {distance && parseFloat(distance) > 0 && (
+                <div className="p-4 bg-energy/5 border border-energy/15 rounded-xl text-center">
+                  <p className="text-xs text-textSecondary">Carbon savings estimate</p>
+                  <p className="text-xl font-bold text-energy font-mono mt-1">
+                    +{(parseFloat(distance) * (commuteStats.find(m => m.name === transportMode)?.co2SavedPerKm || 0.15)).toFixed(2)} kg CO₂
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Log Form */}
-            <form onSubmit={handleLogCommute} className="flex-1 flex flex-col justify-between py-6">
-              <div className="space-y-6">
-                {/* Distance */}
-                <div className="space-y-2">
-                  <label htmlFor="distance" className="text-xs font-bold text-textSecondary uppercase tracking-wider block">
-                    Commute Distance (km)
-                  </label>
-                  <input
-                    type="number"
-                    id="distance"
-                    step="0.1"
-                    min="0.1"
-                    required
-                    value={distance}
-                    onChange={(e) => setDistance(e.target.value)}
-                    className="w-full bg-elevated border border-borderDefault rounded-xl px-4 py-3 text-textPrimary font-mono font-bold focus:outline-none focus:ring-2 focus:ring-energy/20 focus:border-energy"
-                  />
-                </div>
-
-                {/* Transport Mode */}
-                <div className="space-y-2">
-                  <span className="text-xs font-bold text-textSecondary uppercase tracking-wider block mb-2">
-                    Transport Mode
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {commuteStats.map((mode) => (
-                      <button
-                        key={mode.name}
-                        type="button"
-                        onClick={() => setTransportMode(mode.name)}
-                        className={`flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
-                          transportMode === mode.name
-                            ? "bg-energy/10 border-energy text-energy font-bold"
-                            : "bg-surface border-borderDefault hover:bg-elevated text-textSecondary hover:text-textPrimary"
-                        }`}
-                      >
-                        <span className="text-2xl mb-1">{mode.emoji}</span>
-                        <span className="text-xs">{mode.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Live Estimator Indicator */}
-                {distance && parseFloat(distance) > 0 && (
-                  <div className="p-4 bg-energy/5 border border-energy/15 rounded-xl text-center">
-                    <p className="text-xs text-textSecondary">Carbon savings estimate</p>
-                    <p className="text-xl font-bold text-energy font-mono mt-1">
-                      +{(parseFloat(distance) * (commuteStats.find(m => m.name === transportMode)?.co2SavedPerKm || 0.15)).toFixed(2)} kg CO₂
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Submit Action */}
-              <button
-                type="submit"
-                className="w-full bg-energy text-white font-bold py-3.5 rounded-xl hover:bg-energy/90 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
-              >
-                Log Travel Activity
-              </button>
-            </form>
-          </div>
+            {/* Submit Action */}
+            <button
+              type="submit"
+              className="w-full bg-energy text-white font-bold py-3.5 rounded-xl hover:bg-energy/90 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+            >
+              Log Travel Activity
+            </button>
+          </form>
         </div>
-      )}
+      </dialog>
 
       {/* Global Success Notification Toast */}
       {loggedNotification && (
