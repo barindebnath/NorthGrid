@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { appliancePresets, spotPrices, carbonData } from "@/lib/data";
 import { 
   Calculator, 
@@ -13,56 +13,112 @@ import {
   Sparkles
 } from "lucide-react";
 
+/**
+ * Yields control back to the browser's main thread to prevent long blocking tasks.
+ */
+async function yieldToMainThread() {
+  if (typeof window !== 'undefined') {
+    if ('scheduler' in window && 'yield' in (window.scheduler as any)) {
+      await (window.scheduler as any).yield();
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+}
+
 export default function CalculatorPage() {
   const [selectedAppliance, setSelectedAppliance] = useState(appliancePresets[0].name);
   const [startHour, setStartHour] = useState(12); // Default to 12:00
   const [duration, setDuration] = useState(3); // Default to 3 hours
 
+  const [metrics, setMetrics] = useState({
+    currentCost: 0,
+    currentCO2: 0,
+    bestHour: 0,
+    optimalCost: 0,
+    optimalCO2: 0,
+  });
+
   const appliance = appliancePresets.find(a => a.name === selectedAppliance) || appliancePresets[0];
 
-  // Calculations
-  const calculateMetrics = (startIdx: number, runHours: number, kwPower: number) => {
-    let totalCost = 0;
-    let totalCO2 = 0;
+  useEffect(() => {
+    let active = true;
 
-    for (let i = 0; i < runHours; i++) {
-      const idx = (startIdx + i) % spotPrices.length;
-      const hourlyPrice = spotPrices[idx]?.price || 0.5;
-      
-      // Carbon intensity data maps directly index-wise (divided by 2 since spotPrices has 12 points, etc.)
-      const carbonIdx = Math.floor(idx) % carbonData.length;
-      const hourlyIntensity = carbonData[carbonIdx]?.intensity || 120;
+    async function runSimulations() {
+      // 1. Calculate current plan metrics
+      let totalCost = 0;
+      let totalCO2 = 0;
+      const startIdx = Math.floor(startHour / 2);
+      const kwPower = appliance.powerKW;
 
-      totalCost += hourlyPrice * kwPower;
-      totalCO2 += (hourlyIntensity * kwPower);
+      for (let i = 0; i < duration; i++) {
+        const idx = (startIdx + i) % spotPrices.length;
+        const hourlyPrice = spotPrices[idx]?.price || 0.5;
+        const carbonIdx = Math.floor(idx) % carbonData.length;
+        const hourlyIntensity = carbonData[carbonIdx]?.intensity || 120;
+
+        totalCost += hourlyPrice * kwPower;
+        totalCO2 += (hourlyIntensity * kwPower);
+      }
+
+      const currentCost = parseFloat(totalCost.toFixed(2));
+      const currentCO2 = Math.round(totalCO2);
+
+      // Periodically yield to prevent main thread blocking
+      await yieldToMainThread();
+      if (!active) return;
+
+      // 2. Find optimal start hour (lowest cost start window)
+      let bestHour = 0;
+      let bestCost = Infinity;
+      let optimalCO2Val = 0;
+
+      for (let h = 0; h < 24; h += 2) {
+        let loopCost = 0;
+        let loopCO2 = 0;
+        const loopStartIdx = h / 2;
+
+        for (let i = 0; i < duration; i++) {
+          const idx = (loopStartIdx + i) % spotPrices.length;
+          const hourlyPrice = spotPrices[idx]?.price || 0.5;
+          const carbonIdx = Math.floor(idx) % carbonData.length;
+          const hourlyIntensity = carbonData[carbonIdx]?.intensity || 120;
+
+          loopCost += hourlyPrice * kwPower;
+          loopCO2 += (hourlyIntensity * kwPower);
+        }
+
+        const calculatedCost = parseFloat(loopCost.toFixed(2));
+        if (calculatedCost < bestCost) {
+          bestCost = calculatedCost;
+          bestHour = h;
+          optimalCO2Val = Math.round(loopCO2);
+        }
+
+        // Yield periodically in the search loop
+        await yieldToMainThread();
+        if (!active) return;
+      }
+
+      setMetrics({
+        currentCost,
+        currentCO2,
+        bestHour,
+        optimalCost: bestCost,
+        optimalCO2: optimalCO2Val,
+      });
     }
 
-    return {
-      cost: parseFloat(totalCost.toFixed(2)),
-      co2: Math.round(totalCO2)
+    runSimulations();
+
+    return () => {
+      active = false;
     };
-  };
-
-  // 1. Current user configuration metrics
-  const current = calculateMetrics(Math.floor(startHour / 2), duration, appliance.powerKW);
-
-  // 2. Find optimal start hour (lowest cost start window)
-  let bestHour = 0;
-  let bestCost = Infinity;
-
-  for (let h = 0; h < 24; h += 2) {
-    const metrics = calculateMetrics(h / 2, duration, appliance.powerKW);
-    if (metrics.cost < bestCost) {
-      bestCost = metrics.cost;
-      bestHour = h;
-    }
-  }
-
-  const optimal = calculateMetrics(bestHour / 2, duration, appliance.powerKW);
+  }, [selectedAppliance, startHour, duration, appliance.powerKW]);
   
   // Potential savings
-  const costSavings = Math.max(0, current.cost - optimal.cost);
-  const co2Savings = Math.max(0, current.co2 - optimal.co2);
+  const costSavings = Math.max(0, metrics.currentCost - metrics.optimalCost);
+  const co2Savings = Math.max(0, metrics.currentCO2 - metrics.optimalCO2);
 
   // Helper to format hour string
   const formatHour = (h: number) => {
@@ -183,11 +239,11 @@ export default function CalculatorPage() {
               <div className="mt-4 space-y-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-textSecondary">Estimated Cost</p>
-                  <p className="text-xl font-bold font-mono text-textPrimary mt-0.5">{current.cost} DKK</p>
+                  <p className="text-xl font-bold font-mono text-textPrimary mt-0.5">{metrics.currentCost} DKK</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-textSecondary">Carbon Footprint</p>
-                  <p className="text-base font-bold font-mono text-textPrimary mt-0.5">{current.co2} g CO₂</p>
+                  <p className="text-base font-bold font-mono text-textPrimary mt-0.5">{metrics.currentCO2} g CO₂</p>
                 </div>
               </div>
             </div>
@@ -197,16 +253,16 @@ export default function CalculatorPage() {
               <span className="text-[9px] font-bold text-energy bg-energy/10 px-2 py-0.5 rounded border border-energy/10 uppercase tracking-wider absolute top-4 right-4 font-mono">
                 Optimal shift
               </span>
-              <p className="text-xs text-energy">Start time: {formatHour(bestHour)}</p>
+              <p className="text-xs text-energy">Start time: {formatHour(metrics.bestHour)}</p>
 
               <div className="mt-4 space-y-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-energy/70">Estimated Cost</p>
-                  <p className="text-xl font-bold font-mono text-energy mt-0.5">{optimal.cost} DKK</p>
+                  <p className="text-xl font-bold font-mono text-energy mt-0.5">{metrics.optimalCost} DKK</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-energy/70">Carbon Footprint</p>
-                  <p className="text-base font-bold font-mono text-energy mt-0.5">{optimal.co2} g CO₂</p>
+                  <p className="text-base font-bold font-mono text-energy mt-0.5">{metrics.optimalCO2} g CO₂</p>
                 </div>
               </div>
             </div>
@@ -246,8 +302,8 @@ export default function CalculatorPage() {
                 const userStart = startHour;
                 const userEnd = (startHour + duration) % 24;
                 
-                const optStart = bestHour;
-                const optEnd = (bestHour + duration) % 24;
+                const optStart = metrics.bestHour;
+                const optEnd = (metrics.bestHour + duration) % 24;
 
                 // Check if this hour falls inside user run window
                 let isUserActive = false;

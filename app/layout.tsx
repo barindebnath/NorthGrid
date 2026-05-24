@@ -10,6 +10,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
+      <head>
+        <link rel="preconnect" href="https://lh3.googleusercontent.com" crossOrigin="anonymous" />
+      </head>
       <body>
         <MainLayout>{children}</MainLayout>
       </body>

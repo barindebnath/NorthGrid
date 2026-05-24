@@ -280,15 +280,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Intelligence Insights */}
-        <div className="bg-surface border border-borderDefault rounded-2xl p-6">
+        {/* Intelligence Insights with Container Query classes */}
+        <div className="bg-surface border border-borderDefault rounded-2xl p-6 container-insights">
           <div className="flex items-center justify-between mb-6">
             <h4 className="text-sm font-bold text-textPrimary font-headline">Intelligence Hub</h4>
             <span className="text-[10px] font-bold text-energy px-2.5 py-0.5 rounded-full bg-energy/10 uppercase font-mono">
               AI Insights
             </span>
           </div>
-          <div className="space-y-3">
+          <div className="insights-list">
             <div className="p-3 rounded-xl border border-energy/15 bg-energy/5 hover:bg-energy/10 transition-colors cursor-pointer">
               <div className="flex gap-3">
                 <Zap className="w-4 h-4 text-energy shrink-0 mt-0.5" />
